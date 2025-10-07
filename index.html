@@ -1,33 +1,237 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Firebase Test</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Monitoring Dashboard</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background-color: #f5f7fa;
+    margin: 0;
+    padding: 0;
+  }
+  h1 {
+    text-align: center;
+    color: #333;
+    margin: 20px 0;
+  }
+  .login-box {
+    max-width: 320px;
+    margin: 100px auto;
+    background: #fff;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+  .login-box h2 {
+    color: #007bff;
+  }
+  .login-box button {
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  #status {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #555;
+  }
+  .container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin: 30px;
+  }
+  .device-box {
+    width: 260px;
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .device-name {
+    font-weight: bold;
+    color: #007bff;
+    font-size: 18px;
+  }
+  .pm-values span {
+    display: block;
+    margin: 4px 0;
+    font-size: 14px;
+  }
+  .interval-input {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin: 10px 0;
+  }
+  .interval-input input {
+    width: 60px;
+    text-align: center;
+    padding: 3px;
+  }
+  .interval-input button {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
-<h2>Firebase Connection Test</h2>
-<pre id="output">Connecting...</pre>
+
+<h1>PM Monitoring Dashboard</h1>
+
+<!-- Login Section -->
+<div id="loginBox" class="login-box">
+  <h2>Login</h2>
+  <button onclick="login()">Login as Admin</button>
+  <div id="status"></div>
+</div>
+
+<!-- Dashboard Section -->
+<div class="container" id="deviceContainer" style="display:none;"></div>
 
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyBp6Ac1Q2RhCUDuRIhvQ5MkAd-XYQHGcOk",
-  authDomain: "pm-monitor-1949c.firebaseapp.com",
-  databaseURL: "https://pm-monitor-1949c-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "pm-monitor-1949c",
-  storageBucket: "pm-monitor-1949c.firebasestorage.app",
-  messagingSenderId: "252989379253",
-  appId: "1:252989379253:web:1b000622362d26fa9fe4fc",
-  measurementId: "G-ZSMT3DQ9TY"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+  // ===================== FIREBASE CONFIG =====================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBp6Ac1Q2RhCUDuRIhvQ5MkAd-XYQHGcOk",
+    authDomain: "pm-monitor-1949c.firebaseapp.com",
+    databaseURL: "https://pm-monitor-1949c-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "pm-monitor-1949c",
+    storageBucket: "pm-monitor-1949c.firebasestorage.app",
+    messagingSenderId: "252989379253",
+    appId: "1:252989379253:web:1b000622362d26fa9fe4fc",
+    measurementId: "G-ZSMT3DQ9TY"
+  };
 
-db.ref(".info/connected").on("value", snap => {
-  document.getElementById("output").textContent =
-    snap.val() ? "✅ Connected to Firebase!" : "❌ Not connected.";
-});
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+  const container = document.getElementById("deviceContainer");
+  const loginBox = document.getElementById("loginBox");
+  const statusText = document.getElementById("status");
+  const charts = {};
+
+  // ===================== PREDEFINED CREDENTIALS =====================
+  const adminEmail = "admin@pm.com";
+  const adminPassword = "123456";
+
+  // ===================== LOGIN FUNCTION =====================
+  function login() {
+    statusText.textContent = "Logging in...";
+    auth.signInWithEmailAndPassword(adminEmail, adminPassword)
+      .then(() => {
+        statusText.textContent = "✅ Login successful!";
+        loginBox.style.display = "none";
+        container.style.display = "flex";
+        loadData();
+      })
+      .catch(error => {
+        statusText.textContent = "❌ " + error.message;
+      });
+  }
+
+  // ===================== LOAD DEVICE DATA =====================
+  function loadData() {
+    db.ref("devices").on("value", snapshot => {
+      const data = snapshot.val();
+      container.innerHTML = "";
+
+      if (!data) {
+        container.innerHTML = "<p>No device data available.</p>";
+        return;
+      }
+
+      for (let deviceID in data) {
+        const d = data[deviceID];
+        const box = document.createElement("div");
+        box.className = "device-box";
+        box.innerHTML = `
+          <div class="device-name">${d.name || deviceID}</div>
+          <div class="pm-values">
+            <span>PM1.0: ${d.PM1 || "-"}</span>
+            <span>PM2.5: ${d.PM25 || "-"}</span>
+            <span>PM10: ${d.PM10 || "-"}</span>
+            <span>Last Update: ${d.Time || "-"}</span>
+          </div>
+          <div class="interval-input">
+            <input type="number" min="1" value="${d.interval || 10}" id="input-${deviceID}">
+            <button onclick="updateInterval('${deviceID}')">Set</button>
+          </div>
+          <div>Current Interval: ${d.interval || "-"}s</div>
+          <canvas id="chart-${deviceID}" width="220" height="100"></canvas>
+        `;
+        container.appendChild(box);
+
+        // Create/update chart
+        if (!charts[deviceID]) {
+          const ctx = document.getElementById(`chart-${deviceID}`).getContext('2d');
+          charts[deviceID] = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: [],
+              datasets: [{
+                label: 'PM2.5',
+                data: [],
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0,123,255,0.2)',
+                tension: 0.3
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: { y: { beginAtZero: true } }
+            }
+          });
+        }
+
+        const chart = charts[deviceID];
+        const now = d.Time || new Date().toLocaleTimeString();
+        chart.data.labels.push(now);
+        chart.data.datasets[0].data.push(d.PM25 || 0);
+
+        if (chart.data.labels.length > 20) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+        }
+        chart.update();
+      }
+    });
+  }
+
+  // ===================== UPDATE INTERVAL =====================
+  function updateInterval(deviceID) {
+    const input = document.getElementById(`input-${deviceID}`);
+    const val = parseInt(input.value);
+    if (val >= 1) {
+      db.ref(`devices/${deviceID}/interval`).set(val)
+        .then(() => alert(`${deviceID} interval updated to ${val}s`))
+        .catch(err => alert("Error: " + err));
+    } else {
+      alert("Interval must be at least 1 second");
+    }
+  }
 </script>
 </body>
 </html>
