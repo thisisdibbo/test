@@ -21,6 +21,8 @@
   .device-box { width:300px; background:white; border-radius:12px; padding:15px; text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
   .device-name { font-weight:bold; color:#007bff; font-size:18px; margin-bottom:10px; }
   .pm-values span { display:block; margin:4px 0; font-size:14px; }
+  .edit-input { width:80%; padding:4px; margin:3px 0; text-align:center; border-radius:5px; border:1px solid #ccc; }
+  .edit-btn { padding:4px 8px; margin:3px; border:none; background:#007bff; color:white; border-radius:5px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -69,8 +71,7 @@
         statusText.textContent = "✅ Login successful!";
         loginBox.style.display = "none";
         container.style.display = "flex";
-        loadData();
-        setInterval(loadData, 5000); // Auto-refresh every 5s
+        subscribeDevices(); // Start real-time updates
       })
       .catch(error => {
         statusText.textContent = "❌ " + error.message;
@@ -86,9 +87,9 @@
     };
   }
 
-  // ===================== LOAD DEVICE DATA =====================
-  function loadData() {
-    db.ref("devices").once("value").then(snapshot => {
+  // ===================== SUBSCRIBE TO DEVICES =====================
+  function subscribeDevices() {
+    db.ref("devices").on("value", snapshot => {
       const data = snapshot.val();
       container.innerHTML = "";
 
@@ -111,19 +112,52 @@
         const box = document.createElement("div");
         box.className = "device-box";
         box.innerHTML = `
-          <div class="device-name">${d.name || deviceID}</div>
+          <div class="device-name">Device: 
+            <input class="edit-input" id="name-${deviceID}" value="${d.name || deviceID}">
+            <button class="edit-btn" onclick="updateName('${deviceID}')">Update Name</button>
+          </div>
           <div class="pm-values">
             <span>PM1.0: ${d.PM1 || "-"}</span>
             <span>PM2.5: ${d.PM25 || "-"}</span>
             <span>PM10: ${d.PM10 || "-"}</span>
             <span><b>Date:</b> ${datePart}</span>
             <span><b>Time:</b> ${timePart}</span>
-            <span><b>Interval:</b> ${d.interval || "-"}s</span>
+            <span>
+              Interval (s): 
+              <input class="edit-input" id="interval-${deviceID}" type="number" min="1" value="${d.interval || 10}">
+              <button class="edit-btn" onclick="updateInterval('${deviceID}')">Update</button>
+            </span>
           </div>
         `;
         container.appendChild(box);
       }
-    }).catch(err => console.error("Firebase read error:", err));
+    });
+  }
+
+  // ===================== UPDATE NAME =====================
+  function updateName(deviceID) {
+    const input = document.getElementById(`name-${deviceID}`);
+    const newName = input.value.trim();
+    if(newName) {
+      db.ref(`devices/${deviceID}/name`).set(newName)
+        .then(() => alert(`Name updated to ${newName}`))
+        .catch(err => alert("Error updating name: "+err));
+    } else {
+      alert("Name cannot be empty");
+    }
+  }
+
+  // ===================== UPDATE INTERVAL =====================
+  function updateInterval(deviceID) {
+    const input = document.getElementById(`interval-${deviceID}`);
+    const val = parseInt(input.value);
+    if(val >= 1) {
+      db.ref(`devices/${deviceID}/interval`).set(val)
+        .then(() => alert(`Interval updated to ${val} s`))
+        .catch(err => alert("Error updating interval: "+err));
+    } else {
+      alert("Interval must be at least 1 second");
+    }
   }
 </script>
 
