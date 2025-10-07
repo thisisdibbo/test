@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Firebase Test</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body>
+<h2>Firebase Connection Test</h2>
+<pre id="output">Connecting...</pre>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBp6Ac1Q2RhCUDuRIhvQ5MkAd-XYQHGcOk",
+  authDomain: "pm-monitor-1949c.firebaseapp.com",
+  databaseURL: "https://pm-monitor-1949c-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "pm-monitor-1949c",
+  storageBucket: "pm-monitor-1949c.firebasestorage.app",
+  messagingSenderId: "252989379253",
+  appId: "1:252989379253:web:1b000622362d26fa9fe4fc",
+  measurementId: "G-ZSMT3DQ9TY"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+db.ref(".info/connected").on("value", snap => {
+  document.getElementById("output").textContent =
+    snap.val() ? "✅ Connected to Firebase!" : "❌ Not connected.";
+});
+</script>
+</body>
+</html>
