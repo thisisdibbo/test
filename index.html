@@ -16,7 +16,7 @@
 <style>
   body {
     font-family: "Segoe UI", Arial, sans-serif;
-    background-color: #f5f7fa;
+    background-color: #f4f6fa;
     margin: 0;
     padding: 0;
   }
@@ -59,7 +59,7 @@
     margin: 30px;
   }
   .device-box {
-    width: 260px;
+    width: 270px;
     background: white;
     border-radius: 12px;
     padding: 15px;
@@ -94,6 +94,9 @@
     padding: 4px 8px;
     border-radius: 5px;
     cursor: pointer;
+  }
+  canvas {
+    margin-top: 10px;
   }
 </style>
 </head>
@@ -179,11 +182,11 @@
             <button onclick="updateInterval('${deviceID}')">Set</button>
           </div>
           <div>Current Interval: ${d.interval || "-"}s</div>
-          <canvas id="chart-${deviceID}" width="220" height="100"></canvas>
+          <canvas id="chart-${deviceID}" width="240" height="100"></canvas>
         `;
         container.appendChild(box);
 
-        // Create/update chart
+        // Create or update chart
         if (!charts[deviceID]) {
           const ctx = document.getElementById(`chart-${deviceID}`).getContext('2d');
           charts[deviceID] = new Chart(ctx, {
@@ -195,22 +198,30 @@
                 data: [],
                 borderColor: '#007bff',
                 backgroundColor: 'rgba(0,123,255,0.2)',
+                pointRadius: 2,
+                borderWidth: 2,
                 tension: 0.3
               }]
             },
             options: {
+              plugins: { legend: { display: false } },
               responsive: true,
               maintainAspectRatio: false,
-              scales: { y: { beginAtZero: true } }
+              scales: {
+                x: { ticks: { display: false } },
+                y: { beginAtZero: true, title: { display: true, text: 'µg/m³' } }
+              }
             }
           });
         }
 
+        // Add new data point
         const chart = charts[deviceID];
         const now = d.Time || new Date().toLocaleTimeString();
         chart.data.labels.push(now);
         chart.data.datasets[0].data.push(d.PM25 || 0);
 
+        // Keep last 20 points
         if (chart.data.labels.length > 20) {
           chart.data.labels.shift();
           chart.data.datasets[0].data.shift();
