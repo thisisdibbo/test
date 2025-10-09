@@ -23,6 +23,7 @@
   .pm-values span { display:block; margin:4px 0; font-size:14px; }
   .edit-input { width:80%; padding:4px; margin:3px 0; text-align:center; border-radius:5px; border:1px solid #ccc; }
   .edit-btn { padding:4px 8px; margin:3px; border:none; background:#007bff; color:white; border-radius:5px; cursor:pointer; }
+  .download-btn { background:#28a745; border:none; padding:6px 12px; color:white; border-radius:6px; cursor:pointer; margin-top:8px; } /* 🔹 NEW */
 </style>
 </head>
 <body>
@@ -103,10 +104,8 @@
 
         let datePart = "-";
         let timePart = "-";
-        if (d.timestamp) {
-          const f = formatTimestamp(d.timestamp);
-          datePart = f.date;
-          timePart = f.time;
+        if (d.latest && d.latest.timestamp) {
+          datePart = d.latest.timestamp;
         }
 
         const box = document.createElement("div");
@@ -117,16 +116,16 @@
             <button class="edit-btn" onclick="updateName('${deviceID}')">Update Name</button>
           </div>
           <div class="pm-values">
-            <span>PM1.0: ${d.PM1 || "-"}</span>
-            <span>PM2.5: ${d.PM25 || "-"}</span>
-            <span>PM10: ${d.PM10 || "-"}</span>
-            <span><b>Date:</b> ${datePart}</span>
-            <span><b>Time:</b> ${timePart}</span>
+            <span>PM1.0: ${d.latest?.PM1 || "-"}</span>
+            <span>PM2.5: ${d.latest?.PM25 || "-"}</span>
+            <span>PM10: ${d.latest?.PM10 || "-"}</span>
+            <span><b>Last Log:</b> ${datePart}</span>
             <span>
               Interval (s): 
               <input class="edit-input" id="interval-${deviceID}" type="number" min="1" value="${d.interval || 10}">
               <button class="edit-btn" onclick="updateInterval('${deviceID}')">Update</button>
             </span>
+            <button class="download-btn" onclick="downloadCSV('${deviceID}')">⬇ Download CSV</button> <!-- 🔹 NEW -->
           </div>
         `;
         container.appendChild(box);
@@ -159,6 +158,37 @@
       alert("Interval must be at least 1 second");
     }
   }
+
+  // ===================== DOWNLOAD LOGS AS CSV =====================  🔹 NEW
+  async function downloadCSV(deviceID) {
+    try {
+      const snapshot = await db.ref(`devices/${deviceID}/logs`).once("value");
+      const data = snapshot.val();
+      if (!data) {
+        alert("No log data available for this device!");
+        return;
+      }
+
+      let csv = "Timestamp,PM1,PM2.5,PM10\n";
+      for (let key in data) {
+        const entry = data[key];
+        csv += `${entry.timestamp || key},${entry.PM1 || ""},${entry.PM25 || ""},${entry.PM10 || ""}\n`;
+      }
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${deviceID}_logs.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Error downloading CSV: " + err.message);
+    }
+  }
+
 </script>
 
 </body>
