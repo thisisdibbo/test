@@ -17,13 +17,14 @@
   .login-box h2 { color:#007bff; }
   .login-box button { background:#007bff; color:white; border:none; border-radius:6px; padding:10px 20px; cursor:pointer; margin-top:10px; }
   #status { margin-top:10px; font-size:14px; color:#555; }
-  .container { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; margin:20px; }
-  .device-box { width:300px; background:white; border-radius:12px; padding:15px; text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
-  .device-name { font-weight:bold; color:#007bff; font-size:18px; margin-bottom:10px; }
+  .container { display:flex; flex-direction:column; gap:20px; margin:20px; max-width:900px; margin:auto; }
+  .section { background:white; border-radius:12px; padding:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+  .section h2 { margin:0 0 10px 0; color:#007bff; }
+  .device-name { font-weight:bold; font-size:18px; margin-bottom:10px; }
   .pm-values span { display:block; margin:4px 0; font-size:14px; }
-  .edit-input { width:80%; padding:4px; margin:3px 0; text-align:center; border-radius:5px; border:1px solid #ccc; }
+  .edit-input { width:60%; padding:4px; margin:3px 0; text-align:center; border-radius:5px; border:1px solid #ccc; }
   .edit-btn { padding:4px 8px; margin:3px; border:none; background:#007bff; color:white; border-radius:5px; cursor:pointer; }
-  .download-btn { background:#28a745; border:none; padding:6px 12px; color:white; border-radius:6px; cursor:pointer; margin-top:8px; } /* 🔹 NEW */
+  #downloadBtn { background:green; color:white; border:none; border-radius:6px; padding:10px 20px; cursor:pointer; margin-top:10px; }
 </style>
 </head>
 <body>
@@ -38,7 +39,26 @@
 </div>
 
 <!-- Dashboard Section -->
-<div class="container" id="deviceContainer" style="display:none;"></div>
+<div class="container" id="dashboard" style="display:none;">
+  <div class="section" id="latestSection">
+    <h2>Latest Reading</h2>
+    <div id="latestData"></div>
+  </div>
+
+  <div class="section">
+    <h2>Device Settings</h2>
+    Name: <input class="edit-input" id="deviceNameInput"> 
+    <button class="edit-btn" onclick="updateName()">Update Name</button><br>
+    Interval (s): <input class="edit-input" type="number" id="intervalInput" min="1">
+    <button class="edit-btn" onclick="updateInterval()">Update Interval</button>
+  </div>
+
+  <div class="section">
+    <h2>Logs</h2>
+    <button id="downloadBtn" onclick="downloadCSV()">Download CSV</button>
+    <div id="logsContainer" style="max-height:300px; overflow:auto; margin-top:10px;"></div>
+  </div>
+</div>
 
 <script>
   // ===================== FIREBASE CONFIG =====================
@@ -56,139 +76,110 @@
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.database();
-  const container = document.getElementById("deviceContainer");
+
   const loginBox = document.getElementById("loginBox");
   const statusText = document.getElementById("status");
+  const dashboard = document.getElementById("dashboard");
+  const latestDataDiv = document.getElementById("latestData");
+  const logsContainer = document.getElementById("logsContainer");
+  const deviceNameInput = document.getElementById("deviceNameInput");
+  const intervalInput = document.getElementById("intervalInput");
 
-  // ===================== PREDEFINED CREDENTIALS =====================
+  const deviceID = "device01";
+
+  // ===================== LOGIN =====================
   const adminEmail = "mr.d2003feb@gmail.com";
   const adminPassword = "mahin123";
 
-  // ===================== LOGIN FUNCTION =====================
   function login() {
     statusText.textContent = "Logging in...";
     auth.signInWithEmailAndPassword(adminEmail, adminPassword)
       .then(() => {
         statusText.textContent = "✅ Login successful!";
         loginBox.style.display = "none";
-        container.style.display = "flex";
-        subscribeDevices(); // Start real-time updates
+        dashboard.style.display = "flex";
+        subscribeData();
       })
-      .catch(error => {
-        statusText.textContent = "❌ " + error.message;
-      });
+      .catch(error => { statusText.textContent = "❌ " + error.message; });
   }
 
-  // ===================== FORMAT TIMESTAMP =====================
-  function formatTimestamp(ts) {
-    const d = new Date(ts);
-    return {
-      date: d.toLocaleDateString(),
-      time: d.toLocaleTimeString()
-    };
-  }
+  // ===================== SUBSCRIBE DATA =====================
+  function subscribeData() {
+    const baseRef = db.ref("devices/" + deviceID);
 
-  // ===================== SUBSCRIBE TO DEVICES =====================
-  function subscribeDevices() {
-    db.ref("devices").on("value", snapshot => {
-      const data = snapshot.val();
-      container.innerHTML = "";
-
-      if (!data) {
-        container.innerHTML = "<p>No device data available.</p>";
-        return;
-      }
-
-      for (let deviceID in data) {
-        const d = data[deviceID];
-
-        let datePart = "-";
-        let timePart = "-";
-        if (d.latest && d.latest.timestamp) {
-          datePart = d.latest.timestamp;
-        }
-
-        const box = document.createElement("div");
-        box.className = "device-box";
-        box.innerHTML = `
-          <div class="device-name">Device: 
-            <input class="edit-input" id="name-${deviceID}" value="${d.name || deviceID}">
-            <button class="edit-btn" onclick="updateName('${deviceID}')">Update Name</button>
-          </div>
-          <div class="pm-values">
-            <span>PM1.0: ${d.latest?.PM1 || "-"}</span>
-            <span>PM2.5: ${d.latest?.PM25 || "-"}</span>
-            <span>PM10: ${d.latest?.PM10 || "-"}</span>
-            <span><b>Last Log:</b> ${datePart}</span>
-            <span>
-              Interval (s): 
-              <input class="edit-input" id="interval-${deviceID}" type="number" min="1" value="${d.interval || 10}">
-              <button class="edit-btn" onclick="updateInterval('${deviceID}')">Update</button>
-            </span>
-            <button class="download-btn" onclick="downloadCSV('${deviceID}')">⬇ Download CSV</button> <!-- 🔹 NEW -->
-          </div>
+    // Latest Reading
+    baseRef.child("latest").on("value", snapshot => {
+      const d = snapshot.val();
+      if(d){
+        latestDataDiv.innerHTML = `
+          <span><b>PM1.0:</b> ${d.PM1 || "-"}</span>
+          <span><b>PM2.5:</b> ${d.PM25 || "-"}</span>
+          <span><b>PM10:</b> ${d.PM10 || "-"}</span>
+          <span><b>Timestamp:</b> ${d.timestamp || "-"}</span>
         `;
-        container.appendChild(box);
+        deviceNameInput.value = d.name || deviceID;
+        intervalInput.value = d.interval || 10;
       }
+    });
+
+    // Logs
+    baseRef.on("value", snapshot => {
+      const data = snapshot.val();
+      logsContainer.innerHTML = "";
+      let logs = [];
+
+      for(let key in data){
+        if(key.startsWith("log_")){
+          logs.push(data[key]);
+        }
+      }
+
+      // Sort logs by timestamp descending
+      logs.sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+
+      logs.forEach(l=>{
+        const div = document.createElement("div");
+        div.innerHTML = `<span>${l.timestamp} → PM1:${l.PM1} PM2.5:${l.PM25} PM10:${l.PM10}</span>`;
+        logsContainer.appendChild(div);
+      });
     });
   }
 
-  // ===================== UPDATE NAME =====================
-  function updateName(deviceID) {
-    const input = document.getElementById(`name-${deviceID}`);
-    const newName = input.value.trim();
-    if(newName) {
-      db.ref(`devices/${deviceID}/name`).set(newName)
-        .then(() => alert(`Name updated to ${newName}`))
-        .catch(err => alert("Error updating name: "+err));
-    } else {
-      alert("Name cannot be empty");
-    }
+  // ===================== UPDATE NAME & INTERVAL =====================
+  function updateName() {
+    const name = deviceNameInput.value.trim();
+    if(name) db.ref("devices/" + deviceID + "/latest/name").set(name);
+    else alert("Name cannot be empty");
   }
 
-  // ===================== UPDATE INTERVAL =====================
-  function updateInterval(deviceID) {
-    const input = document.getElementById(`interval-${deviceID}`);
-    const val = parseInt(input.value);
-    if(val >= 1) {
-      db.ref(`devices/${deviceID}/interval`).set(val)
-        .then(() => alert(`Interval updated to ${val} s`))
-        .catch(err => alert("Error updating interval: "+err));
-    } else {
-      alert("Interval must be at least 1 second");
-    }
+  function updateInterval() {
+    const val = parseInt(intervalInput.value);
+    if(val >= 1) db.ref("devices/" + deviceID + "/latest/interval").set(val);
+    else alert("Interval must be >=1 s");
   }
 
-  // ===================== DOWNLOAD LOGS AS CSV =====================  🔹 NEW
-  async function downloadCSV(deviceID) {
-    try {
-      const snapshot = await db.ref(`devices/${deviceID}/logs`).once("value");
+  // ===================== DOWNLOAD CSV =====================
+  function downloadCSV() {
+    db.ref("devices/" + deviceID).once("value", snapshot => {
       const data = snapshot.val();
-      if (!data) {
-        alert("No log data available for this device!");
-        return;
+      let csv = "Timestamp,PM1.0,PM2.5,PM10,Name,Interval\n";
+
+      for(let key in data){
+        if(key.startsWith("log_")){
+          const l = data[key];
+          csv += `${l.timestamp},${l.PM1},${l.PM25},${l.PM10},${l.name},${l.interval}\n`;
+        }
       }
 
-      let csv = "Timestamp,PM1,PM2.5,PM10\n";
-      for (let key in data) {
-        const entry = data[key];
-        csv += `${entry.timestamp || key},${entry.PM1 || ""},${entry.PM25 || ""},${entry.PM10 || ""}\n`;
-      }
-
-      const blob = new Blob([csv], { type: "text/csv" });
+      const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${deviceID}_logs.csv`;
-      document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("Error downloading CSV: " + err.message);
-    }
+    });
   }
-
 </script>
 
 </body>
