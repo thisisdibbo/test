@@ -10,9 +10,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
   body { font-family: Arial, sans-serif; background-color: #f4f6fa; margin:0; padding:20px; }
   h1 { text-align:center; color:#333; margin-bottom:20px; }
@@ -28,7 +25,6 @@
   .edit-input { width:60%; padding:4px; margin:3px 0; text-align:center; border-radius:5px; border:1px solid #ccc; }
   .edit-btn { padding:4px 8px; margin:3px; border:none; background:#007bff; color:white; border-radius:5px; cursor:pointer; }
   #downloadBtn { background:green; color:white; border:none; border-radius:6px; padding:10px 20px; cursor:pointer; margin-top:10px; }
-  canvas { max-width:100%; }
 </style>
 </head>
 <body>
@@ -44,13 +40,11 @@
 
 <!-- Dashboard Section -->
 <div class="container" id="dashboard" style="display:none;">
-  <!-- Latest Reading -->
   <div class="section" id="latestSection">
     <h2>Latest Reading</h2>
     <div id="latestData"></div>
   </div>
 
-  <!-- Device Settings -->
   <div class="section">
     <h2>Device Settings</h2>
     Name: <input class="edit-input" id="deviceNameInput"> 
@@ -59,4 +53,134 @@
     <button class="edit-btn" onclick="updateInterval()">Update Interval</button>
   </div>
 
-  <!--
+  <div class="section">
+    <h2>Logs</h2>
+    <button id="downloadBtn" onclick="downloadCSV()">Download CSV</button>
+    <div id="logsContainer" style="max-height:300px; overflow:auto; margin-top:10px;"></div>
+  </div>
+</div>
+
+<script>
+  // ===================== FIREBASE CONFIG =====================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBp6Ac1Q2RhCUDuRIhvQ5MkAd-XYQHGcOk",
+    authDomain: "pm-monitor-1949c.firebaseapp.com",
+    databaseURL: "https://pm-monitor-1949c-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "pm-monitor-1949c",
+    storageBucket: "pm-monitor-1949c.firebasestorage.app",
+    messagingSenderId: "252989379253",
+    appId: "1:252989379253:web:1b000622362d26fa9fe4fc",
+    measurementId: "G-ZSMT3DQ9TY"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  const loginBox = document.getElementById("loginBox");
+  const statusText = document.getElementById("status");
+  const dashboard = document.getElementById("dashboard");
+  const latestDataDiv = document.getElementById("latestData");
+  const logsContainer = document.getElementById("logsContainer");
+  const deviceNameInput = document.getElementById("deviceNameInput");
+  const intervalInput = document.getElementById("intervalInput");
+
+  const deviceID = "device01";
+
+  // ===================== LOGIN =====================
+  const adminEmail = "mr.d2003feb@gmail.com";
+  const adminPassword = "mahin123";
+
+  function login() {
+    statusText.textContent = "Logging in...";
+    auth.signInWithEmailAndPassword(adminEmail, adminPassword)
+      .then(() => {
+        statusText.textContent = "✅ Login successful!";
+        loginBox.style.display = "none";
+        dashboard.style.display = "flex";
+        subscribeData();
+      })
+      .catch(error => { statusText.textContent = "❌ " + error.message; });
+  }
+
+  // ===================== SUBSCRIBE DATA =====================
+  function subscribeData() {
+    const baseRef = db.ref("devices/" + deviceID);
+
+    // Latest Reading
+    baseRef.child("latest").on("value", snapshot => {
+      const d = snapshot.val();
+      if(d){
+        latestDataDiv.innerHTML = `
+          <span><b>PM1.0:</b> ${d.PM1 || "-"}</span>
+          <span><b>PM2.5:</b> ${d.PM25 || "-"}</span>
+          <span><b>PM10:</b> ${d.PM10 || "-"}</span>
+          <span><b>Timestamp:</b> ${d.timestamp || "-"}</span>
+        `;
+        deviceNameInput.value = d.name || deviceID;
+        intervalInput.value = d.interval || 10;
+      }
+    });
+
+    // Logs
+    baseRef.on("value", snapshot => {
+      const data = snapshot.val();
+      logsContainer.innerHTML = "";
+      let logs = [];
+
+      for(let key in data){
+        if(key.startsWith("log_")){
+          logs.push(data[key]);
+        }
+      }
+
+      // Sort logs by timestamp descending
+      logs.sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+
+      logs.forEach(l=>{
+        const div = document.createElement("div");
+        div.innerHTML = `<span>${l.timestamp} → PM1:${l.PM1} PM2.5:${l.PM25} PM10:${l.PM10}</span>`;
+        logsContainer.appendChild(div);
+      });
+    });
+  }
+
+  // ===================== UPDATE NAME & INTERVAL =====================
+  function updateName() {
+    const name = deviceNameInput.value.trim();
+    if(name) db.ref("devices/" + deviceID + "/latest/name").set(name);
+    else alert("Name cannot be empty");
+  }
+
+  function updateInterval() {
+    const val = parseInt(intervalInput.value);
+    if(val >= 1) db.ref("devices/" + deviceID + "/latest/interval").set(val);
+    else alert("Interval must be >=1 s");
+  }
+
+  // ===================== DOWNLOAD CSV =====================
+  function downloadCSV() {
+    db.ref("devices/" + deviceID).once("value", snapshot => {
+      const data = snapshot.val();
+      let csv = "Timestamp,PM1.0,PM2.5,PM10,Name,Interval\n";
+
+      for(let key in data){
+        if(key.startsWith("log_")){
+          const l = data[key];
+          csv += `${l.timestamp},${l.PM1},${l.PM25},${l.PM10},${l.name},${l.interval}\n`;
+        }
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${deviceID}_logs.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+</script>
+
+</body>
+</html>
